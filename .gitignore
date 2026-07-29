@@ -1,0 +1,124 @@
+# ==========================================================================
+# Python
+# ==========================================================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# ==========================================================================
+# IDE / OS
+# ==========================================================================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+
+# ==========================================================================
+# Copyrighted PDFs — must not be redistributed
+# ==========================================================================
+docs/*.pdf
+*.pdf
+
+# ==========================================================================
+# Internal-only notes (not for public repo)
+# ==========================================================================
+docs/PROJECT_REPORT.md
+
+# ==========================================================================
+# Scratch / unrelated code
+# ==========================================================================
+*.f90
+play.ipynb
+rae2822_o_grid.ipynb
+euler_1d_hllc_muscl.f90
+euler_2d_hllc_muscl.f90
+sod_shock_tube.f90
+
+# ==========================================================================
+# Third-party binaries and archives
+# ==========================================================================
+bins/
+*.zip
+*.exe
+*.stackdump
+polar.txt
+
+# ==========================================================================
+# Case directory: run-generated artifacts (regeneratable)
+# ==========================================================================
+
+# Optimization logs and databases
+case/opt_log.txt
+case/opt_log_run1_baseline.txt
+case/opt_summary.md
+case/opt_summary_run1_baseline.md
+case/opt_history.h5
+case/opt_history*.png
+case/verify_log.txt
+case/verify_log_old.txt
+case/eval*_replay.log
+case/baseline_replay.log
+case/primal_diagnostic.log
+
+# ParaView / OpenMDAO / adjoint caches
+case/case.foam
+case/.foam
+case/*.foam
+case/mphys.html
+case/dRdWColoring_*.bin
+case/dRdWPCMat_*.bin
+
+# OpenMDAO N2 / input reports (auto-generated per run)
+case/reports/
+
+# Stray runtime marker at case/case (some builds leave a bare 'case' file)
+case/case
+
+# Extracted design vectors for a specific run (kept in results/ backups instead)
+case/eval*_shape.npy
+case/eval*_aoa.npy
+
+# Solver output directories
+case/postProcessing/
+case/processor*/
+case/logCheckMesh.txt
+
+# Time directories in case/ (numeric folder names other than 0)
+# Keeps case/0_orig/ (the source of truth) but skips case/0/ and any 8001/, 10392/, etc.
+case/[1-9]*/
+case/0/
+
+# ==========================================================================
+# Results backups — keep small artifacts, skip large regeneratable data
+# ==========================================================================
+
+# Full processor decomposition (huge, regeneratable)
+results/*/processor*/
+
+# Time directories inside backups (numeric names, contain flow fields ~6 MB each)
+results/*/[1-9]*/
+
+# Reconstructed mesh files inside backups (mostly duplicates of case/constant/polyMesh)
+results/*/constant/polyMesh/
+
+# Big generated files inside backups
+results/*/opt_history.h5
+results/*/*.log
+
+# System configs inside backups (duplicates of case/system/)
+# Commented out — small files, useful for future you to see exact config used
+# results/*/system/
+
+# ==========================================================================
+# Root-level artifacts
+# ==========================================================================
+debug.log
+bash.exe.stackdump
