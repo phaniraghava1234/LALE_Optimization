@@ -1,0 +1,73 @@
+/*--------------------------------*- C++ -*---------------------------------*\ 
+| ========                 |                                                 | 
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           | 
+|  \    /   O peration     | Version:  v1812                                 | 
+|   \  /    A nd           | Web:      www.OpenFOAM.com                      | 
+|    \/     M anipulation  |                                                 | 
+\*--------------------------------------------------------------------------*/ 
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+
+application     hisa;
+startFrom       latestTime;
+startTime       0;
+stopAt          endTime;
+endTime         15000;
+deltaT          1;
+writeControl    timeStep;
+writeInterval   8000;
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  16;
+writeCompression on;
+timeFormat      general;
+timePrecision   8;
+runTimeModifiable false;
+HisaPrintInterval 100;
+
+DebugSwitches
+{
+    SolverPerformance 0;
+}
+
+// Per-iteration force coefficients written to
+//   postProcessing/forceCoeffs1/0/coefficient.dat
+// One row per pseudo-time iter (writeInterval 1). Independent of DAFoam's
+// coarse-grained HisaPrintInterval, which we keep at 100 to keep opt_log.txt
+// readable.
+//
+// NOTE: liftDir/dragDir/magUInf/rhoInf are BAKED IN for the tutorial preset
+// (U=248 m/s, rho=1.177 kg/m^3, alpha_baseline=2.525 deg). If SLSQP moves
+// aoa significantly (say > 0.5 deg), the reported Cd/Cl here will drift
+// from DAFoam's canonical values by a small % because lift/drag directions
+// won't match the new alpha. DAFoam's own force calc (in opt_summary.md)
+// stays exact because it recomputes directions per primal.
+functions
+{
+    forceCoeffs1
+    {
+        type            forceCoeffs;
+        libs            (forces);
+        writeControl    timeStep;
+        writeInterval   1;
+        log             false;                // don't spam stdout
+        patches         (wing);
+        rho             rhoInf;
+        rhoInf          1.17685;              // tutorial: p/(R*T) = 101325/(287*300)
+        magUInf         248.0;                // tutorial preset U0
+        lRef            1.0;                  // chord length
+        Aref            0.01;                 // chord * span
+        CofR            (0.25 0 0);           // quarter-chord moment reference
+        liftDir         (-0.04408 0.99903 0); // (-sin(alpha0), cos(alpha0), 0)
+        dragDir         ( 0.99903 0.04408 0); // ( cos(alpha0), sin(alpha0), 0)
+        pitchAxis       (0 0 1);
+    }
+}
