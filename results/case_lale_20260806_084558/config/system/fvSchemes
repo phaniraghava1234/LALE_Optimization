@@ -1,0 +1,89 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Verbatim copy of the numerics from DAFoam's own passing regression test
+// case: dafoam/tests/reg_test_files-main/NACA0012V4/system.incompressible
+// (exercised by runRegTests_AeroOpt.py, which is DASimpleFoam + SA +
+// wall functions + FFD + adjoint -- our exact chain).
+//
+// Two deliberate departures from a "robust primal" setup, both required
+// for a well-posed discrete adjoint:
+//
+//   1. NO gradient limiter. We previously had
+//        grad(U) cellLimited Gauss linear 1;
+//      A limiter performs min/max comparisons over cell neighbours, which
+//      is non-smooth. DAFoam builds dR/dW by colored finite differences;
+//      cells near the limiter switch point return a discontinuous residual
+//      change, producing Inf/NaN Jacobian rows. The primal tolerates (and
+//      benefits from) limiters; the adjoint does not.
+//
+//   2. div(pc) is `bounded Gauss upwind`, not `Gauss linear`. pc is the
+//      adjoint preconditioner field, so this scheme sits directly in the
+//      adjoint assembly path.
+
+ddtSchemes
+{
+    default                                             steadyState;
+}
+
+gradSchemes
+{
+    default                                             Gauss linear;
+}
+
+divSchemes
+{
+    default                                             none;
+    div(phi,U)                                          bounded Gauss linearUpwindV grad(U);
+    div((nuEff*dev2(T(grad(U)))))                       Gauss linear;
+    div(pc)                                             bounded Gauss upwind;
+    div(phi,nuTilda)                                    bounded Gauss upwind;
+    div(phi,k)                                          bounded Gauss upwind;
+    div(phi,omega)                                      bounded Gauss upwind;
+    div(phi,epsilon)                                    bounded Gauss upwind;
+    div(phi,gammaInt)                                   bounded Gauss upwind;
+    div(phi,ReThetat)                                   bounded Gauss upwind;
+}
+
+interpolationSchemes
+{
+    default                                             linear;
+}
+
+laplacianSchemes
+{
+    default                                             Gauss linear corrected;
+}
+
+snGradSchemes
+{
+    default                                             corrected;
+}
+
+fluxRequired
+{
+    default                                             no;
+    p;
+    Phi;
+}
+
+wallDist
+{
+    method                                              meshWave;
+}
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //

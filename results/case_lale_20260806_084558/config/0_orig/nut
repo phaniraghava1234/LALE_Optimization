@@ -1,0 +1,53 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      nut;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Verbatim from canonical DAFoam NACA0012 incompressible tutorial:
+// - internalField = 4.5e-5 (SA freestream nu-t seed), NOT 0
+// - wing wall uses nutUSpaldingWallFunction (the tutorial's proven choice)
+// - inout uses calculated (nut derived from nuTilda BC)
+
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 4.5E-5;
+
+boundaryField
+{
+    "(wing.*)"
+    {
+        type            nutUSpaldingWallFunction;
+        value           $internalField;
+    }
+
+    inout
+    {
+        type            calculated;
+        value           $internalField;
+    }
+
+    symmetry1
+    {
+        type            symmetry;
+    }
+
+    symmetry2
+    {
+        type            symmetry;
+    }
+}
+
+
+// ************************************************************************* //
