@@ -4,6 +4,23 @@ Both a rendered Mermaid diagram and a plain-text version are provided so the
 workflow is legible whether the reader is on GitHub, in a plain terminal, or
 in a printout.
 
+## Which case is drawn here
+
+The diagrams below are drawn with **Case 1 (RAE 2822, transonic)** parameters
+filled in. The pipeline structure is identical for **Case 2 (MH139-F,
+low-Reynolds)**; only the values inside Components 1, 3 and 5 change:
+
+| Component | Case 1 — RAE 2822 | Case 2 — MH139-F |
+|---|---|---|
+| 1 — Meshing | 57 k cells, y⁺ ≈ 1 wall-resolved, 30 c far field | 32–45 k cells, y⁺ ≈ 30 wall functions, 10 c far field |
+| 2 — Geometry | 30 × 2 × 2 FFD, 58 shape DVs | identical |
+| 3 — Primal | `DAHisaFoam`, compressible, JST flux | `DASimpleFoam`, incompressible SIMPLE |
+| 4 — Adjoint | DAFoam + PETSc GMRES | identical |
+| 5 — MDO driver | GEMSEO + SLSQP, DVs = shape + α | GEMSEO + SLSQP, DVs = shape only (α fixed at 4.5°) |
+
+Full details: [`CASE_TRANSONIC_RAE2822.md`](CASE_TRANSONIC_RAE2822.md) and
+[`CASE_LOWRE_MH139F.md`](CASE_LOWRE_MH139F.md).
+
 ## Mermaid (renders on GitHub, GitLab, VS Code preview, and modern markdown viewers)
 
 ```mermaid
@@ -163,6 +180,8 @@ Each SLSQP outer iteration performs the following inner sequence:
 
 ## Runtime breakdown (for reference)
 
+### Case 1 — RAE 2822, transonic
+
 | Phase | Wall time (57k cells, 4 MPI ranks) |
 |---|---:|
 | Container init, DAFoam startup | ~30 s |
@@ -175,3 +194,18 @@ Each SLSQP outer iteration performs the following inner sequence:
 | **Total per SLSQP outer iteration** | **~130-180 min** |
 | **Total for max_iter=5** | **~11-15 hours** |
 | **Total for max_iter=10** | **~22-30 hours** |
+
+### Case 2 — MH139-F, low-Reynolds
+
+Measured from the 50-evaluation run archived at
+`results/case_lale_20260806_084558/`:
+
+| Phase | Wall time (32-45k cells, 6 MPI ranks) |
+|---|---:|
+| Primal (one evaluation) | ~4-7 min |
+| **Average per primal, incl. adjoint amortized** | **~10.3 min** |
+| **Total: 50 primals + 27 adjoints** | **8 h 37 m** |
+
+Roughly **15× cheaper per evaluation than Case 1** — the mesh is smaller, the
+incompressible SIMPLE solve is cheaper than the density-based transonic
+primal, and there is no shock to resolve.

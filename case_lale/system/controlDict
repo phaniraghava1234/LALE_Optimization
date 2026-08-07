@@ -1,0 +1,81 @@
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// LALE case, MH139-F at Re = 1.666e5, alpha = 4.5 deg (fixed).
+// Solver: DASimpleFoam (incompressible SIMPLE) via DAFoam wrapper.
+// Physical setup: c = 0.305 m, U = 8.30 m/s, rho = 1.1673 kg/m^3.
+// CFD setup (unit-chord): c = 1 m, U = 2.5315 m/s, rho = 1.1673 kg/m^3.
+
+application     simpleFoam;
+startFrom       latestTime;
+startTime       0;
+stopAt          endTime;
+endTime         15000;                // hard ceiling; std/slope gate exits sooner
+deltaT          1;                    // pseudo-time step for SIMPLE
+writeControl    timeStep;
+writeInterval   8000;                 // one write near end; DAFoam handles latest
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  16;
+writeCompression on;
+timeFormat      general;
+timePrecision   8;
+runTimeModifiable false;
+
+DebugSwitches
+{
+    SolverPerformance 0;
+}
+
+// Per-iteration force coefficients written to
+//   postProcessing/forceCoeffs1/0/coefficient.dat
+// One row per pseudo-time iter. Independent of DAFoam's internal
+// force-integration, which recomputes lift/drag directions from the
+// current patchV; the two match at alpha = 4.5 deg baseline.
+//
+// LALE freestream constants (unit-chord CFD representation):
+//   rhoInf   1.1673 kg/m^3    (500 m ISA)
+//   magUInf  2.5315 m/s       (scaled from physical 8.30 m/s to keep Re)
+//   lRef     1.0              (unit chord in the CFD)
+//   Aref     0.01             (chord * 2D-slab span)
+//   alpha    4.5 deg (fixed)
+//     -> sin(4.5 deg) = 0.078459
+//     -> cos(4.5 deg) = 0.996917
+functions
+{
+    forceCoeffs1
+    {
+        type            forceCoeffs;
+        libs            (forces);
+        writeControl    timeStep;
+        writeInterval   1;
+        log             false;                // don't spam stdout
+        patches         (wing);
+        rho             rhoInf;
+        rhoInf          1.1673;
+        magUInf         2.5315;
+        lRef            1.0;
+        Aref            0.01;
+        CofR            (0.25 0 0);           // quarter-chord moment reference
+        liftDir         (-0.078459 0.996917 0);
+        dragDir         ( 0.996917 0.078459 0);
+        pitchAxis       (0 0 1);
+    }
+}
+
+
+// ************************************************************************* //

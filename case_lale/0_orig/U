@@ -1,0 +1,56 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Verbatim from canonical DAFoam NACA0012 incompressible tutorial:
+// - wing wall: fixedValue (0 0 0) explicit (NOT noSlip)
+// - inout: inletOutlet with $internalField (NOT hard-coded value literal)
+// - LALE freestream is 2.5315 m/s at alpha=4.5 deg:
+//     Ux = 2.5315 * cos(4.5) = 2.5237
+//     Uy = 2.5315 * sin(4.5) = 0.19864
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (2.5237 0.19864 0);
+
+boundaryField
+{
+    "(wing.*)"
+    {
+        type            fixedValue;
+        value           uniform (0 0 0);
+    }
+
+    inout
+    {
+        type            inletOutlet;
+        inletValue      $internalField;
+        value           $internalField;
+    }
+
+    symmetry1
+    {
+        type            symmetry;
+    }
+
+    symmetry2
+    {
+        type            symmetry;
+    }
+}
+
+
+// ************************************************************************* //

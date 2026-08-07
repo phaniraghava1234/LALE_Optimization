@@ -1,0 +1,31 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+|                                                                             |
+|    HiSA: High Speed Aerodynamic solver                                      |
+|    Copyright (C) 2014-2017 Johan Heyns - CSIR, South Africa                 |
+|    Copyright (C) 2014-2017 Oliver Oxtoby - CSIR, South Africa               |
+|                                                                             |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      turbulenceProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Verbatim from the canonical DAFoam NACA0012 incompressible tutorial.
+// SA with wall functions is the LALE approach; the RAS block content
+// matches the tutorial byte-for-byte (no extra Prt inside RAS).
+simulationType RAS;
+RAS
+{
+    RASModel             SpalartAllmaras;
+    turbulence           on;
+    printCoeffs          off;
+    Prt                  1.0;
+}
+
+
+// ************************************************************************* //
