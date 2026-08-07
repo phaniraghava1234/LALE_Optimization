@@ -73,14 +73,20 @@ def write_plot3d(path: str, P: np.ndarray) -> None:
             f.write("\n")
 
 
+STEMS = {"tutorial": "RAE2822", "benchmark": "RAE2822", "lale": "MH139F"}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", default="../case")
+    ap.add_argument("--preset", default="tutorial", choices=list(STEMS),
+                    help="Chooses which airfoil profile files to wrap.")
     args = ap.parse_args()
 
+    stem = STEMS[args.preset]
     ss, ps = read_profile_pair(
-        os.path.join(args.case, "profiles", "RAE2822PS.profile"),
-        os.path.join(args.case, "profiles", "RAE2822SS.profile"),
+        os.path.join(args.case, "profiles", f"{stem}_PS.profile"),
+        os.path.join(args.case, "profiles", f"{stem}_SS.profile"),
     )
     P = build_lattice(ss, ps)
     out = os.path.join(args.case, "FFD", "wingFFD.xyz")

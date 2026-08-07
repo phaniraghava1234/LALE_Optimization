@@ -58,30 +58,74 @@ from airfoil_io import (  # noqa: E402
     read_profile_pair,
     thicken_te,
 )
-from boundary_layer import TUTORIAL, first_cell_height  # noqa: E402
+from boundary_layer import (  # noqa: E402
+    TUTORIAL, BENCHMARK, LALE_500M, first_cell_height,
+)
 
-# ----------------------------- user parameters -----------------------------
+# Preset registry — pairs an operating point with a set of profile files
+# and per-preset mesh-density tuning.
+#
+# n_circ_front: cells along the front C-block outer arc (~47 chord). The
+#   inner (airfoil-side) cell size at the split column x=0.30 is
+#   0.30 / n_circ_front. Match this to N_CIRC_MID (=0.70/N_CIRC_MID) for
+#   a smooth transition at the split. Transonic cases historically used
+#   120 for LE resolution; the LALE case at low Re can use 40 without
+#   losing physics.
+# Per-preset configuration. Every mesh-shape and grading knob is here so
+# regenerating with `--preset tutorial|benchmark` reproduces the historical
+# transonic mesh, and `--preset lale` produces the tuned LALE mesh.
+#
+# Keys (all required per preset):
+#   stem            : profile file basename (case_dir/profiles/<stem>_{PS,SS}.profile)
+#   flow            : Freestream from boundary_layer.py, drives y+ -> dy1
+#   n_circ_front    : cells along the airfoil arc in blocks 1t/1b (LE region)
+#   y_plus          : target y+ at the wall (drives first-cell height)
+#   n_profile_pts   : cosine-resample count for the airfoil profile spline
+#   R_FRONT         : front half-circle radius, in chords
+#   L_WAKE          : wake extension length aft of TE, in chords
+#   H_TOP           : rectangular top/bot boundary y, in chords
+#                     (MUST equal R_FRONT: the semicircle at (X_SPLIT, 0)
+#                      with radius R_FRONT must reach P_top=(X_SPLIT, +H_TOP))
+#   WAKE_START      : first wake cell size at TE (start_size in wake blocks)
+#   WAKE_C2C        : cell-to-cell expansion in wake x
+#   N_TE_BASE       : cells across the TE gap in block 7 (y direction)
+#   C2C_BL          : radial expansion ratio in the BL grading
+#   mid_chord_mode  : block 2 (mid, airfoil-to-TE) chord chop mode:
+#                     "c2c_101"    -> start=0.005, c2c=1.01     (transonic default)
+#                     "match_wake" -> start=0.005, end=WAKE_START (LALE smoothing)
+_TRANSONIC_COMMON = dict(
+    R_FRONT=30.0, L_WAKE=30.0, H_TOP=30.0,
+    WAKE_START=0.01, WAKE_C2C=1.10, N_TE_BASE=10,
+    C2C_BL=1.15, mid_chord_mode="c2c_101",
+    n_circ_front=120, y_plus=1.0, n_profile_pts=200,
+)
+PRESETS = {
+    "tutorial":  {"stem": "RAE2822", "flow": TUTORIAL,  **_TRANSONIC_COMMON},
+    "benchmark": {"stem": "RAE2822", "flow": BENCHMARK, **_TRANSONIC_COMMON},
+    # LALE at Re=1.66e5, incompressible DASimpleFoam with wall functions.
+    # Smaller domain (10c) since low-Re incompressible needs less far-field.
+    # Coarser LE cluster (n_profile_pts=100, n_circ_front=60) prevents the
+    # 5e-10 min-volume LE cells that caused SA production runaway.
+    # y+=30 target (dy1 ~ 1.1e-3) matches nutUSpaldingWallFunction on the wall.
+    # Wake tuning (start=0.02, c2c=1.05) keeps GAMG well-conditioned.
+    # Block 2 chord in "match_wake" mode -> smooth cell transition at TE.
+    "lale": {
+        "stem": "MH139F", "flow": LALE_500M,
+        "R_FRONT": 10.0, "L_WAKE": 10.0, "H_TOP": 10.0,
+        "WAKE_START": 0.02, "WAKE_C2C": 1.05, "N_TE_BASE": 3,
+        "C2C_BL": 1.12, "mid_chord_mode": "match_wake",
+        "n_circ_front": 60, "y_plus": 30.0, "n_profile_pts": 100,
+    },
+}
+
+# ----------------------------- topology constants --------------------------
+# These are geometric invariants shared by all presets. If you need to change
+# them, do so per-preset (they'd then move into PRESETS above).
 X_SPLIT   = 0.30      # airfoil split point (fraction of chord); LE-side vs mid-side
 CHORD_TE  = 0.998     # airfoil x at TE (per the RAE 2822 profile files)
-R_FRONT   = 30.0      # front half-circle radius, in chords
-L_WAKE    = 30.0      # wake extension length from TE, in chords
-H_TOP     = 30.0      # rectangular top/bot boundary y, in chords
 Z_SPAN    = 0.01      # 2D slab thickness (matches DAFoam symmetryPlanes)
-
-N_CIRC_FRONT = 120    # cells along the direction 1 axis of blocks 1t/1b.
-                      # Was 60 -- doubled to reduce the cell-size discontinuity
-                      # at the split column (x=0.3) where front blocks (arc
-                      # length ~47c) meet mid blocks (arc length ~0.7c).
-                      # Perfect matching would need thousands of cells; 120
-                      # halves the visible disparity.
-N_CIRC_MID   = 80     # cells along airfoil arc in blocks 2t/2b (split to TE)
-WAKE_START   = 0.01   # start_size at TE for wake x grading. Matches the
-                      # last mid-block cell size (~0.009c) so the transition
-                      # from mid blocks to wake blocks is smooth.
-WAKE_C2C     = 1.10   # cell-to-cell expansion in wake x. Cells grow gradually.
-N_TE_BASE    = 10     # cells across the TE gap inside block 7 (y direction)
-C2C_BL       = 1.15   # radial expansion ratio near the wall
-Y_PLUS       = 1.0    # target y+ for wall spacing
+N_CIRC_MID = 80       # cells along airfoil arc in blocks 2t/2b (split to TE)
+                      # (retained for compatibility; not currently referenced)
 # ---------------------------------------------------------------------------
 
 
@@ -97,14 +141,40 @@ def _to_3d(pt2d: np.ndarray) -> np.ndarray:
     return np.hstack([pt2d, np.zeros((len(pt2d), 1))])
 
 
-def build_mesh(case_dir: str) -> cb.Mesh:
+def build_mesh(case_dir: str, preset: str = "tutorial") -> cb.Mesh:
+    if preset not in PRESETS:
+        raise KeyError(f"Unknown preset {preset!r}; valid: {list(PRESETS)}")
+    cfg = PRESETS[preset]
+    # Unpack per-preset mesh parameters into local names so the block-build
+    # code below reads naturally. All shape/grading knobs come from `cfg`
+    # -- there are no more mesh-shape globals.
+    stem            = cfg["stem"]
+    n_circ_front    = cfg["n_circ_front"]
+    n_profile_pts   = cfg["n_profile_pts"]
+    R_FRONT         = cfg["R_FRONT"]
+    L_WAKE          = cfg["L_WAKE"]
+    H_TOP           = cfg["H_TOP"]
+    WAKE_START      = cfg["WAKE_START"]
+    WAKE_C2C        = cfg["WAKE_C2C"]
+    N_TE_BASE       = cfg["N_TE_BASE"]
+    C2C_BL          = cfg["C2C_BL"]
+    mid_chord_mode  = cfg["mid_chord_mode"]
+
+    # Geometric consistency: the front semicircle at (X_SPLIT, 0) with
+    # radius R_FRONT must pass through the corner points P_top and P_bot
+    # sitting at (X_SPLIT, +/-H_TOP), so R_FRONT must equal H_TOP.
+    assert abs(R_FRONT - H_TOP) < 1e-9, (
+        f"[preset {preset!r}] R_FRONT ({R_FRONT}) must equal H_TOP "
+        f"({H_TOP}) for the front semicircle to close on the "
+        "rectangular block corners."
+    )
     # ---------- 1. Load and prep the airfoil ------------------------------
     ss, ps = read_profile_pair(
-        os.path.join(case_dir, "profiles", "RAE2822PS.profile"),
-        os.path.join(case_dir, "profiles", "RAE2822SS.profile"),
+        os.path.join(case_dir, "profiles", f"{stem}_PS.profile"),
+        os.path.join(case_dir, "profiles", f"{stem}_SS.profile"),
     )
-    ss = cosine_resample(ss, n_pts=200)
-    ps = cosine_resample(ps, n_pts=200)
+    ss = cosine_resample(ss, n_pts=n_profile_pts)
+    ps = cosine_resample(ps, n_pts=n_profile_pts)
     ss, ps = thicken_te(ss, ps, gap_target=2.0e-3, taper_x_start=0.9)
 
     # Split each surface at X_SPLIT
@@ -138,9 +208,12 @@ def build_mesh(case_dir: str) -> cb.Mesh:
     wake_up_TE  = np.array([CHORD_TE + L_WAKE, TE_up[1],  0.0])
     wake_low_TE = np.array([CHORD_TE + L_WAKE, TE_low[1], 0.0])
 
-    # Wall spacing from y+=1 physics
-    dy1 = first_cell_height(TUTORIAL, y_plus=Y_PLUS)["dy1"]
-    print(f"[BL] first cell height dy1 = {dy1:.3e} m (y+ target {Y_PLUS})")
+    # Wall spacing from y+ target physics for the selected preset
+    fs = PRESETS[preset]["flow"]
+    y_plus_target = PRESETS[preset]["y_plus"]
+    dy1 = first_cell_height(fs, y_plus=y_plus_target)["dy1"]
+    print(f"[BL] preset {preset!r}: Re = {fs.Re:.3e}, "
+          f"first cell height dy1 = {dy1:.3e} m (y+ target {y_plus_target})")
 
     # Half-circle center: the split column at y=0. cb.Origin() places an
     # arc through the two endpoint vertices centered on this point.
@@ -174,7 +247,7 @@ def build_mesh(case_dir: str) -> cb.Mesh:
     face_1t.add_edge(3, cb.Origin(circle_center))
     op_1t = cb.Extrude(face_1t, [0.0, 0.0, Z_SPAN])
     op_1t.chop(0, end_size=dy1, c2c_expansion=1.0 / C2C_BL)  # RADIAL BL
-    op_1t.chop(1, count=N_CIRC_FRONT)                                 # CIRCUMF
+    op_1t.chop(1, count=n_circ_front)                                 # CIRCUMF
     op_1t.chop(2, count=1)
     op_1t.set_patch("right", "wing")     # edge 1 = airfoil (LE -> split_up)
     op_1t.set_patch("left", "inout")     # edge 3 = half-circle arc
@@ -192,7 +265,7 @@ def build_mesh(case_dir: str) -> cb.Mesh:
         n_points=100,
     ))
     op_1b = cb.Extrude(face_1b, [0.0, 0.0, Z_SPAN])
-    op_1b.chop(0, count=N_CIRC_FRONT)                                 # CIRCUMF
+    op_1b.chop(0, count=n_circ_front)                                 # CIRCUMF
     op_1b.chop(1, end_size=dy1, c2c_expansion=1.0 / C2C_BL)  # RADIAL BL
     op_1b.chop(2, count=1)
     op_1b.set_patch("front", "inout")    # edge 0 = half-circle arc
@@ -207,11 +280,18 @@ def build_mesh(case_dir: str) -> cb.Mesh:
     face_2t = cb.Face([split_up, TE_up, P_top_TE, P_top])
     face_2t.add_edge(0, cb.OnCurve(ss_mid_curve, n_points=100))
     op_2t = cb.Extrude(face_2t, [0.0, 0.0, Z_SPAN])
-    # Circumferential grading: start small at split_up (~0.005c, close to
-    # block 1t's airfoil cell size at that corner) and grow at 1.01 per
-    # cell toward TE_up (ending ~0.012c, close to wake first cell 0.01c).
-    # Smooths the split->mid transition AND the mid->wake transition.
-    op_2t.chop(0, start_size=0.005, c2c_expansion=1.01)               # CIRCUMF graded
+    # Circumferential grading, chosen by preset's mid_chord_mode:
+    #  c2c_101    : historical transonic default, start=0.005, c2c=1.01
+    #               (block 2 last cell ends up ~0.012c, close to but not
+    #                exactly matching WAKE_START)
+    #  match_wake : LALE smoothing, start=0.005, end=WAKE_START
+    #               (guarantees smooth transition at TE column into block 3)
+    if mid_chord_mode == "c2c_101":
+        op_2t.chop(0, start_size=0.005, c2c_expansion=1.01)
+    elif mid_chord_mode == "match_wake":
+        op_2t.chop(0, start_size=0.005, end_size=WAKE_START)
+    else:
+        raise ValueError(f"Unknown mid_chord_mode {mid_chord_mode!r}")
     op_2t.chop(1, start_size=dy1, c2c_expansion=C2C_BL)               # RADIAL BL (no invert)
     op_2t.chop(2, count=1)
     op_2t.set_patch("front", "wing")     # edge 0 = airfoil (split_up -> TE_up)
@@ -231,7 +311,10 @@ def build_mesh(case_dir: str) -> cb.Mesh:
     op_2b = cb.Extrude(face_2b, [0.0, 0.0, Z_SPAN])
     op_2b.chop(0, start_size=dy1, c2c_expansion=C2C_BL)               # RADIAL BL (no invert)
     # Circumferential grading (mirror of block 2t; see 2t comment for rationale)
-    op_2b.chop(1, start_size=0.005, c2c_expansion=1.01)               # CIRCUMF graded
+    if mid_chord_mode == "c2c_101":
+        op_2b.chop(1, start_size=0.005, c2c_expansion=1.01)
+    else:  # "match_wake" (only other valid option; already validated above)
+        op_2b.chop(1, start_size=0.005, end_size=WAKE_START)
     op_2b.chop(2, count=1)
     op_2b.set_patch("right", "inout")    # edge 1 = bottom farfield
     op_2b.set_patch("left", "wing")      # edge 3 = airfoil (TE_low -> split_low)
@@ -327,10 +410,14 @@ def verify_patch_geometry(dict_path: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", default="../case", help="OpenFOAM case directory")
-    ap.add_argument("--run", action="store_true", help="run blockMesh + checkMesh after writing")
+    ap.add_argument("--preset", default="tutorial", choices=list(PRESETS),
+                    help="Operating-point preset (chooses profile stem and Re "
+                         "for wall spacing).")
+    ap.add_argument("--run", action="store_true",
+                    help="run blockMesh + checkMesh after writing")
     args = ap.parse_args()
 
-    mesh = build_mesh(args.case)
+    mesh = build_mesh(args.case, preset=args.preset)
     out = os.path.join(args.case, "system", "blockMeshDict")
     mesh.write(out, debug_path=None)
     print(f"[OK] wrote {out}")
@@ -342,7 +429,7 @@ def main() -> None:
         report = check_mesh(args.case)
         print(report)
         if not report.passed:
-            raise SystemExit("Mesh rejected by quality gate (Step 1.5).")
+            raise SystemExit("Mesh rejected by quality gate.")
 
 
 if __name__ == "__main__":

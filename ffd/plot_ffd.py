@@ -149,7 +149,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--profile-dir", default="case/profiles",
-        help="dir with RAE2822PS.profile and RAE2822SS.profile",
+        help="directory containing the two .profile files",
     )
     parser.add_argument(
         "--out", default="ffd_plot.png",
@@ -172,8 +172,14 @@ def main() -> None:
     profile_dir = Path(args.profile_dir)
     if not profile_dir.is_absolute():
         profile_dir = project_root / profile_dir
-    ps_path = profile_dir / "RAE2822PS.profile"
-    ss_path = profile_dir / "RAE2822SS.profile"
+    # Auto-detect the airfoil stem by glob (e.g., RAE2822 or MH139F).
+    ss_candidates = sorted(profile_dir.glob("*_SS.profile"))
+    if not ss_candidates:
+        raise SystemExit(f"[plot_ffd] no *_SS.profile found in {profile_dir}")
+    stem = ss_candidates[0].name[:-len("_SS.profile")]
+    print(f"[plot_ffd] using profile stem: {stem}")
+    ps_path = profile_dir / f"{stem}_PS.profile"
+    ss_path = profile_dir / f"{stem}_SS.profile"
     for p in (ps_path, ss_path):
         if not p.is_file():
             raise SystemExit(f"[plot_ffd] profile file not found: {p}")
